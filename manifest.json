@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Berkeley Course Navigator",
+  "version": "1.0",
+  "description": "Navigate across semesters and years for Berkeley courses",
+  "permissions": [
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://classes.berkeley.edu/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://classes.berkeley.edu/content/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
