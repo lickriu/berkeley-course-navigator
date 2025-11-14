@@ -10,7 +10,7 @@
   right: 20px;
   width: 320px;
   background: white;
-  border: 2px solid var(--berkeley-blue);
+  border: none;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 2147483647;
@@ -44,6 +44,7 @@
   justify-content: center;
   border-radius: 4px;
   transition: background 0.2s;
+  user-select: none;
 }
 
 #cn-toggle:hover {
