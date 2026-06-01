@@ -136,6 +136,9 @@ function createOverlay(courseInfo) {
 
   document.body.appendChild(overlay);
 
+  // Restore saved position (if the user moved it previously)
+  restoreOverlayPosition(overlay);
+
   // Add toggle functionality
   document.getElementById("cn-toggle").addEventListener("click", () => {
     const content = document.getElementById("cn-content");
@@ -149,7 +152,115 @@ function createOverlay(courseInfo) {
     }
   });
 
+  // Make the overlay draggable by its header
+  makeDraggable(overlay);
+
   return overlay;
+}
+
+const OVERLAY_POSITION_KEY = "course_navigator_position";
+
+// Clamp a position so the overlay stays within the viewport
+function clampPosition(left, top, overlay) {
+  const maxLeft = Math.max(0, window.innerWidth - overlay.offsetWidth);
+  const maxTop = Math.max(0, window.innerHeight - overlay.offsetHeight);
+  return {
+    left: Math.min(Math.max(0, left), maxLeft),
+    top: Math.min(Math.max(0, top), maxTop),
+  };
+}
+
+// Position the overlay via left/top, overriding the default right/top CSS
+function setOverlayPosition(overlay, left, top) {
+  overlay.style.left = `${left}px`;
+  overlay.style.top = `${top}px`;
+  overlay.style.right = "auto";
+}
+
+// Restore a previously saved position from localStorage
+function restoreOverlayPosition(overlay) {
+  try {
+    const stored = localStorage.getItem(OVERLAY_POSITION_KEY);
+    if (!stored) return;
+    const { left, top } = JSON.parse(stored);
+    const clamped = clampPosition(left, top, overlay);
+    setOverlayPosition(overlay, clamped.left, clamped.top);
+  } catch (e) {
+    console.error("Course Navigator: Failed to restore position", e);
+  }
+}
+
+// Enable dragging the overlay around by its header
+function makeDraggable(overlay) {
+  const header = overlay.querySelector(".cn-header");
+  if (!header) return;
+
+  header.style.cursor = "grab";
+
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let startLeft = 0;
+  let startTop = 0;
+
+  const onMouseDown = (e) => {
+    // Don't start a drag when interacting with the toggle button
+    if (e.target.closest("#cn-toggle")) return;
+    if (e.button !== 0) return;
+
+    dragging = true;
+    const rect = overlay.getBoundingClientRect();
+    startX = e.clientX;
+    startY = e.clientY;
+    startLeft = rect.left;
+    startTop = rect.top;
+
+    header.style.cursor = "grabbing";
+    // Prevent text selection while dragging
+    e.preventDefault();
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  };
+
+  const onMouseMove = (e) => {
+    if (!dragging) return;
+    const next = clampPosition(
+      startLeft + (e.clientX - startX),
+      startTop + (e.clientY - startY),
+      overlay
+    );
+    setOverlayPosition(overlay, next.left, next.top);
+  };
+
+  const onMouseUp = () => {
+    if (!dragging) return;
+    dragging = false;
+    header.style.cursor = "grab";
+
+    document.removeEventListener("mousemove", onMouseMove);
+    document.removeEventListener("mouseup", onMouseUp);
+
+    // Persist the final position
+    try {
+      const rect = overlay.getBoundingClientRect();
+      localStorage.setItem(
+        OVERLAY_POSITION_KEY,
+        JSON.stringify({ left: rect.left, top: rect.top })
+      );
+    } catch (e) {
+      console.error("Course Navigator: Failed to save position", e);
+    }
+  };
+
+  header.addEventListener("mousedown", onMouseDown);
+
+  // Keep the overlay on-screen if the window is resized
+  window.addEventListener("resize", () => {
+    const rect = overlay.getBoundingClientRect();
+    const clamped = clampPosition(rect.left, rect.top, overlay);
+    setOverlayPosition(overlay, clamped.left, clamped.top);
+  });
 }
 
 // Generate term buttons with availability checking

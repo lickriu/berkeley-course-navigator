@@ -28,6 +28,8 @@
   align-items: center;
   border-radius: 6px 6px 0 0;
   font-size: 15px;
+  cursor: grab;
+  user-select: none;
 }
 
 #cn-toggle {
@@ -45,6 +47,7 @@
   border-radius: 4px;
   transition: background 0.2s;
   user-select: none;
+  cursor: pointer;
 }
 
 #cn-toggle:hover {
