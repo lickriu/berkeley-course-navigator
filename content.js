@@ -117,17 +117,13 @@ function createOverlay(courseInfo) {
   // Restore saved position (if the user moved it previously)
   restoreOverlayPosition(overlay);
 
-  // Add toggle functionality
+  // Collapse/expand, remembering the choice across pages
+  if (localStorage.getItem(OVERLAY_COLLAPSED_KEY) === "true") {
+    setCollapsed(true);
+  }
   document.getElementById("cn-toggle").addEventListener("click", () => {
     const content = document.getElementById("cn-content");
-    const button = document.getElementById("cn-toggle");
-    if (content.style.display === "none") {
-      content.style.display = "block";
-      button.textContent = "−";
-    } else {
-      content.style.display = "none";
-      button.textContent = "+";
-    }
+    setCollapsed(content.style.display !== "none");
   });
 
   // Make the overlay draggable by its header
@@ -137,6 +133,20 @@ function createOverlay(courseInfo) {
 }
 
 const OVERLAY_POSITION_KEY = "course_navigator_position";
+const OVERLAY_COLLAPSED_KEY = "course_navigator_collapsed";
+
+// Collapse or expand the overlay content and persist the choice
+function setCollapsed(collapsed) {
+  const content = document.getElementById("cn-content");
+  const button = document.getElementById("cn-toggle");
+  content.style.display = collapsed ? "none" : "block";
+  button.textContent = collapsed ? "+" : "−";
+  try {
+    localStorage.setItem(OVERLAY_COLLAPSED_KEY, String(collapsed));
+  } catch (e) {
+    console.error("Course Navigator: Failed to save collapsed state", e);
+  }
+}
 
 // Clamp a position so the overlay stays within the viewport
 function clampPosition(left, top, overlay) {
@@ -245,8 +255,10 @@ function makeDraggable(overlay) {
 async function populateTerms(courseInfo) {
   const content = document.getElementById("cn-content");
 
+  // Go one year past the current one so upcoming terms appear as soon
+  // as Berkeley publishes them
   const years = [];
-  for (let y = 2026; y >= 2016; y--) {
+  for (let y = new Date().getFullYear() + 1; y >= 2016; y--) {
     years.push(y);
   }
 
