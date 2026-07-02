@@ -19,9 +19,6 @@ const CourseCache = {
             this.memoryCache.set(url, entry);
           }
         }
-        console.log(
-          `Course Navigator: Loaded ${this.memoryCache.size} cached entries`
-        );
       }
     } catch (e) {
       console.error("Course Navigator: Failed to load cache", e);
@@ -63,20 +60,6 @@ const CourseCache = {
     }
   },
 
-  clearExpired() {
-    const now = Date.now();
-    let cleared = 0;
-    for (const [url, entry] of this.memoryCache.entries()) {
-      if (now - entry.timestamp > this.CACHE_EXPIRY) {
-        this.memoryCache.delete(url);
-        cleared++;
-      }
-    }
-    if (cleared > 0) {
-      this.persist();
-      console.log(`Course Navigator: Cleared ${cleared} expired entries`);
-    }
-  },
 };
 
 // Parse the current course URL
@@ -105,18 +88,15 @@ function generateCourseUrl(dept, course, sectionInfo, year, semester) {
   return `https://classes.berkeley.edu/content/${year}-${semester}-${dept}-${course}-${sectionInfo}`;
 }
 
-// Check if a course exists for a given term (async)
+// Check if a course exists for a given term.
+// Returns true/false, or null when the check itself failed (e.g. offline),
+// so callers can distinguish "not offered" from "couldn't check".
 async function checkCourseExists(url) {
   try {
-    console.log(`[NETWORK REQUEST] Fetching: ${url}`);
     const response = await fetch(url, { method: "HEAD" });
-    console.log(
-      `[NETWORK RESPONSE] ${url} -> ${response.ok ? "EXISTS" : "NOT FOUND"}`
-    );
     return response.ok;
   } catch (e) {
-    console.log(`[NETWORK ERROR] ${url} -> ${e.message}`);
-    return false;
+    return null;
   }
 }
 
@@ -129,9 +109,7 @@ function createOverlay(courseInfo) {
       <strong>${courseInfo.fullCourseCode}</strong>
       <button id="cn-toggle" title="Toggle navigator">−</button>
     </div>
-    <div class="cn-content" id="cn-content">
-      <div class="cn-loading">Loading terms...</div>
-    </div>
+    <div class="cn-content" id="cn-content"></div>
   `;
 
   document.body.appendChild(overlay);
@@ -315,82 +293,85 @@ async function populateTerms(courseInfo) {
   content.innerHTML = html;
 
   // Check availability for non-current terms (in background)
-  checkAvailability(courseInfo);
+  checkAvailability();
+}
+
+// Cap concurrent HEAD requests to stay respectful to the server
+const CHECK_CONCURRENCY = 4;
+
+// Mark a button as available/unavailable
+function applyAvailability(button, exists) {
+  button.classList.remove("cn-checking", "cn-error");
+  if (exists) {
+    button.classList.add("cn-available");
+  } else {
+    button.classList.add("cn-unavailable");
+    button.style.pointerEvents = "none";
+  }
+}
+
+// Check a single term and update its button; caches only definitive results
+async function checkTerm(button) {
+  const url = button.getAttribute("data-url");
+  const exists = await checkCourseExists(url);
+
+  if (exists === null) {
+    // Check failed (e.g. offline) — don't cache, allow retry
+    button.classList.remove("cn-checking");
+    button.classList.add("cn-error");
+    button.title = "Couldn't check availability — click to retry";
+    button.addEventListener("click", retryCheck, { once: true });
+    return;
+  }
+
+  CourseCache.set(url, exists);
+  applyAvailability(button, exists);
+}
+
+async function retryCheck(e) {
+  e.preventDefault();
+  const button = e.currentTarget;
+  button.classList.remove("cn-error");
+  button.classList.add("cn-checking");
+  button.removeAttribute("title");
+  await checkTerm(button);
 }
 
 // Check which terms actually have the course available
-async function checkAvailability(courseInfo) {
+async function checkAvailability() {
   const buttons = document.querySelectorAll(".cn-term-btn.cn-checking");
 
-  let cacheHits = 0;
-  let cacheMisses = 0;
-
-  console.log(`\n========== COURSE AVAILABILITY CHECK ==========`);
-  console.log(
-    `Checking ${buttons.length} terms for ${courseInfo.fullCourseCode}`
-  );
-
-  // Check in batches to avoid overwhelming the server
+  // Resolve cache hits instantly; queue the rest for fetching
+  const toFetch = [];
   for (const button of buttons) {
-    const url = button.getAttribute("data-url");
-
-    // Try to get from cache first
-    const cachedResult = CourseCache.get(url);
-
-    let exists;
-    if (cachedResult !== null) {
-      // Cache hit - use cached value
-      exists = cachedResult;
-      cacheHits++;
-      console.log(`[CACHE HIT] ${url} -> ${exists ? "EXISTS" : "NOT FOUND"}`);
+    const cached = CourseCache.get(button.getAttribute("data-url"));
+    if (cached !== null) {
+      applyAvailability(button, cached);
     } else {
-      // Cache miss - fetch from server
-      console.log(`[CACHE MISS] ${url} - fetching from server...`);
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      exists = await checkCourseExists(url);
-
-      // Store in cache
-      CourseCache.set(url, exists);
-      cacheMisses++;
-    }
-
-    // Update button state
-    if (exists) {
-      button.classList.remove("cn-checking");
-      button.classList.add("cn-available");
-    } else {
-      button.classList.remove("cn-checking");
-      button.classList.add("cn-unavailable");
-      button.style.pointerEvents = "none";
+      toFetch.push(button);
     }
   }
 
-  console.log(`\n========== SUMMARY ==========`);
-  console.log(`✓ Cache hits: ${cacheHits} (instant)`);
-  console.log(`✗ Cache misses: ${cacheMisses} (network requests made)`);
-  console.log(`Total cache size: ${CourseCache.memoryCache.size} entries`);
-  console.log(`===============================\n`);
+  // Drain the queue with a few parallel workers
+  let next = 0;
+  const worker = async () => {
+    while (next < toFetch.length) {
+      await checkTerm(toFetch[next++]);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(CHECK_CONCURRENCY, toFetch.length) }, worker)
+  );
 }
 
 // Initialize the extension
 async function init() {
-  console.log("Course Navigator: Starting initialization...");
-
   // Initialize cache first
   await CourseCache.init();
-  console.log(
-    `Course Navigator: Cache loaded with ${CourseCache.memoryCache.size} entries`
-  );
 
   // Check if we're on a course page
   const courseInfo = parseCourseUrl();
-
-  if (!courseInfo) {
-    console.log("Course Navigator: Not on a course page");
-    return;
-  }
-
-  console.log("Course Navigator: Initialized for", courseInfo.fullCourseCode);
+  if (!courseInfo) return;
 
   // Create the overlay
   createOverlay(courseInfo);

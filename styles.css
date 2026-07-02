@@ -61,12 +61,6 @@
   padding: 12px;
 }
 
-.cn-loading {
-  text-align: center;
-  padding: 20px;
-  color: #666;
-}
-
 /* Grid layout */
 .cn-grid {
   display: flex;
@@ -131,6 +125,23 @@
   color: var(--berkeley-gold);
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(0, 50, 98, 0.2);
+}
+
+/* Check failed (network error) — clickable to retry */
+.cn-term-btn.cn-error {
+  background: #fff7ed;
+  color: #b45309;
+  border-color: #f59e0b;
+  cursor: pointer;
+}
+
+.cn-term-btn.cn-error::after {
+  content: " ⟳";
+  font-size: 12px;
+}
+
+.cn-term-btn.cn-error:hover {
+  background: #ffedd5;
 }
 
 /* Unavailable term */

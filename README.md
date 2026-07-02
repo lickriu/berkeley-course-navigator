@@ -29,6 +29,7 @@ The navigator should be in the top right corner
 - **Current term**: Highlighted in blue (the page you're currently on)
 - **Available terms**: Shown in white with blue border
 - **Unavailable terms**: Grayed out and crossed out
+- **Orange terms (⟳)**: Availability check failed (e.g. offline) — click to retry
 - **Toggle button (−/+)**: Collapse/expand the navigator
 
 ## How It Works
@@ -43,7 +44,8 @@ The navigator should be in the top right corner
 
 3. **Availability Check**: Makes HEAD requests to check if each term exists
 
-   - Uses small delays (100ms) between requests to be respectful to servers
+   - Runs at most 4 requests in parallel to be respectful to servers
+   - Results are cached in localStorage for 7 days; failed checks are not cached and can be retried by clicking the term
 
 4. **UI Updates**: Shows which terms are available vs unavailable
 
